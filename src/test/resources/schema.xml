@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<schema name="autoSolrSchema" version="1.5">
+    <types>
+        <fieldType class="org.apache.solr.schema.StrField" name="StrField"/>
+        <fieldType name="string_ci" class="solr.TextField" sortMissingLast="true" omitNorms="true">
+            <analyzer>
+                <tokenizer class="solr.KeywordTokenizerFactory"/>
+                <filter class="solr.LowerCaseFilterFactory"/>
+            </analyzer>
+        </fieldType>
+    </types>
+    <fields>
+
+        <field indexed="true" multiValued="false" name="shortname" type="StrField"/>
+        <field docValues="true" indexed="true" multiValued="false" name="shortname_ci" type="StrField"/>
+
+        <field indexed="true" multiValued="false" name="name" type="StrField"/>
+        <field docValues="true" indexed="true" multiValued="false" name="name_ci" type="StrField"/>
+
+        <field indexed="true" multiValued="false" name="id" type="StrField"/>
+        <field indexed="true" multiValued="false" name="owner" type="StrField"/>
+
+    </fields>
+    <uniqueKey>(owner,id)</uniqueKey>
+</schema>
