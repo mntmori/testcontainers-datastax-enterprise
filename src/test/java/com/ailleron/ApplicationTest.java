@@ -3,16 +3,20 @@ package com.ailleron;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.dse.DseCluster;
 import com.datastax.driver.dse.DseSession;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.Container;
 import org.testcontainers.containers.FixedHostPortGenericContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.MountableFile;
 
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 public class ApplicationTest {
@@ -23,9 +27,9 @@ public class ApplicationTest {
     public static GenericContainer dseServer =
             new FixedHostPortGenericContainer("datastax/dse-server:6.7.2")
                     .withCommand("-s")
+                    .withStartupTimeout(Duration.of(2, ChronoUnit.MINUTES))
                     .withEnv("DS_LICENSE", "accept")
                     .withExposedPorts(9042, 8983);
-
 
     @Before
     public void setUp() throws Exception {
@@ -38,13 +42,19 @@ public class ApplicationTest {
         /**
          * DSE Customization plugin
          */
-        dseServer.copyFileToContainer(MountableFile.forClasspathResource("dse-fit.jar"), "/opt/dse/resources/solr/lib/dse-fit.jar");
+        dseServer.copyFileToContainer(MountableFile.forClasspathResource("dse-fit.jar"),
+                "/opt/dse/resources/solr/lib/dse-fit.jar");
 
         /**
          * CORE files
          */
-        dseServer.copyFileToContainer(MountableFile.forClasspathResource("schema.xml"), "/opt/dse/schema.xml");
-        dseServer.copyFileToContainer(MountableFile.forClasspathResource("solrconfig.xml"), "/opt/dse/solrconfig.xml");
+        dseServer.copyFileToContainer(
+                MountableFile.forClasspathResource("schema.xml"),
+                "/opt/dse/schema.xml");
+
+        dseServer.copyFileToContainer(
+                MountableFile.forClasspathResource("solrconfig.xml"),
+                "/opt/dse/solrconfig.xml");
 
         /**
          * CQL SCHEMA
@@ -56,10 +66,15 @@ public class ApplicationTest {
 
     private void setupSearchCore() throws java.io.IOException, InterruptedException {
         // CREATE KEYSPACE
-        dseServer.execInContainer("cqlsh", "-f", "/opt/dse/schema.cql");
-
+        Container.ExecResult cqlshResult = dseServer.execInContainer("cqlsh", "-f", "/opt/dse/schema.cql");
+        if (cqlshResult.getStderr().length() > 3) {
+            logger.error("Error while creating CQL schema: " + cqlshResult.getStderr());
+        }
         // CREATE CORE
-        dseServer.execInContainer("dsetool", "create_core", "sort.sort_table", "schema=/opt/dse/schema.xml", "solrconfig=/opt/dse/solrconfig.xml");
+        Container.ExecResult createCoreResult = dseServer.execInContainer("dsetool", "create_core", "sort.sort_table", "schema=/opt/dse/schema.xml", "solrconfig=/opt/dse/solrconfig.xml");
+        if (createCoreResult.getStderr().length() > 3) {
+            logger.error("Error while creating dse core: " + createCoreResult.getStderr());
+        }
     }
 
 
@@ -85,9 +100,15 @@ public class ApplicationTest {
 
             DseSession dseSession = dseCluster.connect();
             List<Row> rows = dseSession
-                    .execute("select * from sort.sort_table where solr_query = '{\"q\": \"*:*\", \"sort\": \"shortname_ci asc\"}';").all();
+                    .execute("select * from sort.sort_table " +
+                            "where solr_query = '" + sortQuery() + "';").all();
             Assert.assertFalse(rows.isEmpty());
         }
+    }
+
+    @NotNull
+    private String sortQuery() {
+        return "{\"q\": \"*:*\", \"sort\": \"shortname_ci asc\"}";
     }
 
     @Test
@@ -99,7 +120,7 @@ public class ApplicationTest {
 
             DseSession dseSession = dseCluster.connect();
             List<Row> rows = dseSession
-                    .execute("select * from sort.sort_table where solr_query = '{\"q\": \"*:*\", \"fq\": \"shortname_ci:*d*\" \"sort\": \"shortname_ci asc\"}';").all();
+                    .execute("select * from sort.sort_table where solr_query = '{\"q\": \"*:*\", \"fq\": \"shortname_ci:*d*\", \"sort\": \"shortname_ci asc\"}';").all();
             Assert.assertFalse(rows.isEmpty());
         }
     }
@@ -113,7 +134,7 @@ public class ApplicationTest {
 
             DseSession dseSession = dseCluster.connect();
             List<Row> rows = dseSession
-                    .execute("select * from sort.sort_table where solr_query = '{\"q\": \"*:*\", \"fq\": \"shortname_ci:*s*\" \"sort\": \"shortname_ci asc\"}';").all();
+                    .execute("select * from sort.sort_table where solr_query = '{\"q\": \"*:*\", \"fq\": \"shortname_ci:*s*\", \"sort\": \"shortname_ci asc\"}';").all();
             Assert.assertFalse(rows.isEmpty());
             Assert.assertEquals(3, rows.size());
         }
